@@ -571,6 +571,92 @@
   ::-webkit-scrollbar-thumb { background: #c0c8dc; border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
+  /* ── SECCIÓN FÁBRICAS ── */
+  .fabricas-section {
+    margin-bottom: 32px;
+  }
+
+  .fabricas-header {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .fabricas-header::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .fabricas-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .fabricas-grid { grid-template-columns: 1fr; }
+  }
+
+  .fabrica-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .fabrica-card-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .fabrica-nombre {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+  }
+
+  .fabrica-pend-total {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .fabrica-lineas {
+    display: flex;
+    gap: 6px;
+    padding: 10px 20px 0;
+    flex-wrap: wrap;
+  }
+
+  .linea-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 99px;
+    border: 1px solid;
+    font-weight: 500;
+  }
+
+  .fabrica-chart-wrap {
+    padding: 10px 16px 16px;
+    height: 200px;
+    position: relative;
+  }
+
   @media (max-width: 600px) {
     header { padding: 16px 20px; }
     main { padding: 20px; }
@@ -660,6 +746,58 @@
   <div class="chart-card" style="margin-bottom: 32px;">
     <div class="chart-title">Unidades pedidas vs entregadas por semana solicitada de entrega</div>
     <div class="chart-wrap" style="height: 240px;"><canvas id="chartSemana" role="img" aria-label="Unidades pedidas vs entregadas por semana"></canvas></div>
+  </div>
+
+  <!-- CAPACIDAD POR FÁBRICA -->
+  <div class="fabricas-section">
+    <div class="fabricas-header">Unidades pendientes por fábrica y línea de producción — semana solicitada de entrega</div>
+    <div class="fabricas-grid">
+
+      <!-- VARENNA -->
+      <div class="fabrica-card">
+        <div class="fabrica-card-header" style="border-top: 3px solid #0077cc;">
+          <span class="fabrica-nombre" style="color:#0077cc">VARENNA</span>
+          <span class="fabrica-pend-total" id="varennaPendTotal">— u. pendientes</span>
+        </div>
+        <div class="fabrica-lineas">
+          <span class="linea-badge" style="color:#0077cc;border-color:#0077cc;background:#0077cc11">Mangas</span>
+          <span class="linea-badge" style="color:#0099cc;border-color:#0099cc;background:#0099cc11">Pantalones</span>
+        </div>
+        <div class="fabrica-chart-wrap">
+          <canvas id="chartVarenna"></canvas>
+        </div>
+      </div>
+
+      <!-- TEJICA -->
+      <div class="fabrica-card">
+        <div class="fabrica-card-header" style="border-top: 3px solid #e8530a;">
+          <span class="fabrica-nombre" style="color:#e8530a">TEJICA</span>
+          <span class="fabrica-pend-total" id="tejicaPendTotal">— u. pendientes</span>
+        </div>
+        <div class="fabrica-lineas">
+          <span class="linea-badge" style="color:#e8530a;border-color:#e8530a;background:#e8530a11">Camisas</span>
+          <span class="linea-badge" style="color:#f0a500;border-color:#f0a500;background:#f0a50011">Pantalones</span>
+        </div>
+        <div class="fabrica-chart-wrap">
+          <canvas id="chartTejica"></canvas>
+        </div>
+      </div>
+
+      <!-- ICSA -->
+      <div class="fabrica-card">
+        <div class="fabrica-card-header" style="border-top: 3px solid #00875a;">
+          <span class="fabrica-nombre" style="color:#00875a">ICSA</span>
+          <span class="fabrica-pend-total" id="icsaPendTotal">— u. pendientes</span>
+        </div>
+        <div class="fabrica-lineas">
+          <span class="linea-badge" style="color:#00875a;border-color:#00875a;background:#00875a11">Punto</span>
+        </div>
+        <div class="fabrica-chart-wrap">
+          <canvas id="chartIcsa"></canvas>
+        </div>
+      </div>
+
+    </div>
   </div>
 
   <!-- FILTERS -->
@@ -831,6 +969,7 @@ function finishLoad(src) {
   populateFilters();
   renderKPIs();
   renderCharts();
+  renderFabricas();
   renderTable();
 }
 
@@ -902,6 +1041,7 @@ function applyFilters() {
   renderTable();
   renderKPIs();
   renderCharts();
+  renderFabricas();
 }
 
 // ── KPIs ─────────────────────────────────────────────────
@@ -1028,7 +1168,139 @@ function renderSemana(rows) {
   });
 }
 
-// ── TABLE ────────────────────────────────────────────────
+// ── CLASIFICACIÓN POR DESCRIPCIÓN ───────────────────────
+// Devuelve la línea de producción según fábrica + descripción
+function clasificarLinea(lugar, desc) {
+  const d = (desc || '').toUpperCase();
+  const l = (lugar || '').toUpperCase();
+
+  if (l.includes('VARENNA')) {
+    // Pantalones: descripción contiene PANTALON
+    if (/PANTALON/.test(d)) return 'Pantalones';
+    // Mangas: todo lo demás (blasier, blazer, coat, abrigo, sac, saco, etc.)
+    return 'Mangas';
+  }
+
+  if (l.includes('TEJICA')) {
+    // Camisas: camisa, camiseta, set de lino
+    if (/CAMISA|CAMISETA|SET/.test(d)) return 'Camisas';
+    // Pantalones: pantalon, bermuda, chino, jogger, táctico, fajina
+    return 'Pantalones';
+  }
+
+  if (l.includes('ICSA')) return 'Punto';
+
+  return null; // fábricas no reconocidas (BRANDTEAM, etc.)
+}
+
+// ── GRÁFICOS DE FÁBRICAS ─────────────────────────────────
+function renderFabricas() {
+  const rows = getFiltered();
+
+  // Solo pedidos con unidades pendientes > 0 y semana válida
+  const conPend = rows.filter(r => {
+    const pend = num(r, COL.pendiente);
+    const sem  = r[COL.semSol];
+    return pend > 0 && sem && sem !== '0';
+  });
+
+  renderFabricaChart('VARENNA', conPend, 'chartVarenna', 'varennaPendTotal',
+    { 'Mangas':     { bg: '#0077cc44', border: '#0077cc' },
+      'Pantalones': { bg: '#0099cc44', border: '#0099cc' } });
+
+  renderFabricaChart('TEJICA', conPend, 'chartTejica', 'tejicaPendTotal',
+    { 'Camisas':    { bg: '#e8530a44', border: '#e8530a' },
+      'Pantalones': { bg: '#f0a50044', border: '#f0a500' } });
+
+  renderFabricaChart('ICSA', conPend, 'chartIcsa', 'icsaPendTotal',
+    { 'Punto':      { bg: '#00875a44', border: '#00875a' } });
+}
+
+function renderFabricaChart(fabrica, allRows, canvasId, totalId, lineaStyles) {
+  // Filtrar por fábrica
+  const rows = allRows.filter(r =>
+    (r[COL.lugar] || '').toUpperCase().includes(fabrica)
+  );
+
+  // Total pendiente de esta fábrica
+  const totalPend = rows.reduce((s, r) => s + num(r, COL.pendiente), 0);
+  document.getElementById(totalId).textContent =
+    totalPend > 0 ? totalPend.toLocaleString('es-AR') + ' u. pendientes' : 'Sin pendientes';
+
+  // Acumular pendientes por semana × línea
+  const semanas = new Set();
+  const lineas  = Object.keys(lineaStyles);
+  const mapa    = {}; // { linea: { semana: total } }
+
+  lineas.forEach(l => mapa[l] = {});
+
+  rows.forEach(r => {
+    const linea = clasificarLinea(r[COL.lugar], r[COL.desc]);
+    if (!linea || !mapa[linea]) return;
+    const sem  = r[COL.semSol];
+    const pend = num(r, COL.pendiente);
+    semanas.add(sem);
+    mapa[linea][sem] = (mapa[linea][sem] || 0) + pend;
+  });
+
+  const semsOrdenadas = [...semanas].sort((a, b) => Number(a) - Number(b));
+
+  if (charts[canvasId]) charts[canvasId].destroy();
+
+  // Si no hay datos
+  if (!semsOrdenadas.length) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = '#7a82a0';
+    ctx.font = "12px 'DM Mono', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillText('Sin pendientes', ctx.canvas.width / 2, ctx.canvas.height / 2);
+    return;
+  }
+
+  const datasets = lineas.map(linea => ({
+    label: linea,
+    data: semsOrdenadas.map(s => mapa[linea][s] || 0),
+    backgroundColor: lineaStyles[linea].bg,
+    borderColor:     lineaStyles[linea].border,
+    borderWidth: 1.5,
+    borderRadius: 4,
+  }));
+
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: semsOrdenadas.map(s => 'S' + s),
+      datasets,
+    },
+    options: {
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color: '#5a6080', font: { size: 9, family: 'DM Mono' }, boxWidth: 10, padding: 10 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString('es-AR')} u.`
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: false,
+          ticks: { color: '#5a6080', font: { size: 9, family: 'DM Mono' } },
+          grid: { color: '#dde1ec' }
+        },
+        y: {
+          stacked: false,
+          ticks: { color: '#7a82a0', font: { size: 9 }, callback: v => formatK(v) },
+          grid: { color: '#dde1ec' }
+        }
+      }
+    }
+  });
+}
 function sortBy(col) {
   if (sortCol === col) sortAsc = !sortAsc;
   else { sortCol = col; sortAsc = true; }
