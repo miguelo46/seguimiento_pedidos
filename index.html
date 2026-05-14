@@ -1248,28 +1248,6 @@ function renderFabricaChart(fabrica, allRows, canvasId, totalId, lineaStyles) {
     (r[COL.lugar] || '').toUpperCase().includes(fabrica)
   );
 
-  // Total pendiente por línea
-  const totalPorLinea = {};
-  lineas.forEach(l => {
-    totalPorLinea[l] = rows
-      .filter(r => clasificarLinea(r[COL.lugar], r[COL.desc]) === l)
-      .reduce((s, r) => s + num(r, COL.pendiente), 0);
-  });
-
-  // Renderizar subtotales con color por línea
-  const totalEl = document.getElementById(totalId);
-  if (totalEl) {
-    totalEl.innerHTML = lineas.map(l => {
-      const color = lineaStyles[l].border;
-      const val   = totalPorLinea[l];
-      return `<span class="subtotal-item">
-        <span class="subtotal-dot" style="background:${color}"></span>
-        <span style="color:var(--muted)">${l}:</span>
-        <span class="subtotal-val" style="color:${color}">${val > 0 ? val.toLocaleString('es-AR') : '—'}</span>
-      </span>`;
-    }).join('');
-  }
-
   // Acumular pendientes por semana × línea
   const semanas = new Set();
   const lineas  = Object.keys(lineaStyles);
@@ -1285,6 +1263,26 @@ function renderFabricaChart(fabrica, allRows, canvasId, totalId, lineaStyles) {
     semanas.add(sem);
     mapa[linea][sem] = (mapa[linea][sem] || 0) + pend;
   });
+
+  // Total pendiente por línea
+  const totalPorLinea = {};
+  lineas.forEach(l => {
+    totalPorLinea[l] = Object.values(mapa[l]).reduce((s, v) => s + v, 0);
+  });
+
+  // Renderizar subtotales con color por línea
+  const totalEl = document.getElementById(totalId);
+  if (totalEl) {
+    totalEl.innerHTML = lineas.map(l => {
+      const color = lineaStyles[l].border;
+      const val   = totalPorLinea[l];
+      return `<span class="subtotal-item">
+        <span class="subtotal-dot" style="background:${color}"></span>
+        <span style="color:var(--muted)">${l}:</span>
+        <span class="subtotal-val" style="color:${color}">${val > 0 ? val.toLocaleString('es-AR') : '—'}</span>
+      </span>`;
+    }).join('');
+  }
 
   const semsOrdenadas = [...semanas].sort((a, b) => Number(a) - Number(b));
 
