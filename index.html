@@ -1167,6 +1167,7 @@ function renderBarPendientes(canvasId, wrapperId, counts, color) {
     }
   });
 }
+function renderPie(id, counts, bgColors, borderColors) {
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
   charts[id] = new Chart(ctx, {
@@ -1186,34 +1187,6 @@ function renderBarPendientes(canvasId, wrapperId, counts, color) {
         labels: { color: '#5a6080', font: { size: 10, family: 'DM Mono' }, boxWidth: 10, padding: 10 }
       }},
       cutout: '65%'
-    }
-  });
-}
-
-function renderBar(id, counts, bgColor, borderColor) {
-  if (charts[id]) charts[id].destroy();
-  const ctx = document.getElementById(id).getContext('2d');
-  const labels = Object.keys(counts).slice(0, 12);
-  const values = labels.map(k => counts[k]);
-  charts[id] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        backgroundColor: bgColor || '#0077cc33',
-        borderColor: borderColor || '#0077cc',
-        borderWidth: 1,
-        borderRadius: 4
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: '#7a82a0', font: { size: 9 } }, grid: { color: '#dde1ec' } },
-        y: { ticks: { color: '#5a6080', font: { size: 9, family: 'DM Mono' } }, grid: { display: false } }
-      }
     }
   });
 }
