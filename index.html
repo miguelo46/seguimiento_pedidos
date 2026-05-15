@@ -837,7 +837,7 @@
       <option value="">Todas las marcas</option>
     </select>
     <select class="filter-select" id="filterPrenda" onchange="applyFilters()">
-      <option value="">Todas las prendas</option>
+      <option value="">Todas las líneas</option>
     </select>
     <select class="filter-select" id="filterLugar" onchange="applyFilters()">
       <option value="">Todos los lugares</option>
@@ -862,8 +862,8 @@
           <tr>
             <th onclick="sortBy('MARCA / COMPRADOR')">Marca / Comprador</th>
             <th onclick="sortBy('NRO DE ORDEN')">N° Orden</th>
-            <th onclick="sortBy('PRENDA')">Prenda</th>
-            <th onclick="sortBy('DESCRIPCIÓN')">Descripción</th>
+            <th>Línea</th>
+            <th onclick="sortBy('DESCRIPCION')">Descripción</th>
             <th onclick="sortBy('COLOR')">Color</th>
             <th onclick="sortBy('LUGAR DE FABRICACION')">Lugar fab.</th>
             <th onclick="sortBy('CANTIDAD PEDIDA')">Cant. pedida</th>
@@ -924,7 +924,7 @@ const COL = {
   fechaPactada:'FECHA PACTADA DE ENTREGA',
   lugar:       'LUGAR DE FABRICACION',
   modelo:      'MODELO / CALCE / ART',
-  desc:        'DESCRIPCIÓN',
+  desc:        'DESCRIPCION',
   tejido:      'TEJIDO',
   color:       'COLOR',
   cantPedida:  'CANTIDAD PEDIDA',
@@ -944,9 +944,6 @@ const COL = {
   cantEntregada:'CANTIDAD ENTREGADA',
   fCierre:     'FECHA PEDIDO CERRADO',
   pendiente:   'PENDIENTE',
-  prenda:      'PRENDA',
-  semSol:      'SEMANA SOLICITADA ENTREGA',
-  semPact:     'SEMANA PACTADA ENTREGA',
   semCierre:   'SEMANA PEDIDO CERRADO',
 };
 
@@ -1021,12 +1018,12 @@ function pct(entregado, pedido) {
 function populateFilters() {
   const estados = [...new Set(allData.map(r => r[COL.estado]).filter(Boolean))].sort();
   const marcas  = [...new Set(allData.map(r => r[COL.marca]).filter(Boolean))].sort();
-  const prendas = [...new Set(allData.map(r => r[COL.prenda]).filter(Boolean))].sort();
+  const lineas  = [...new Set(allData.map(r => clasificarLinea(r[COL.lugar], r[COL.desc])).filter(Boolean))].sort();
   const lugares = [...new Set(allData.map(r => r[COL.lugar]).filter(Boolean))].sort();
 
   fillSelect('filterEstado', estados);
   fillSelect('filterMarca',  marcas);
-  fillSelect('filterPrenda', prendas);
+  fillSelect('filterPrenda', lineas);
   fillSelect('filterLugar',  lugares);
 }
 
@@ -1046,17 +1043,17 @@ function getFiltered() {
   const q      = document.getElementById('searchInput').value.toLowerCase();
   const estado = document.getElementById('filterEstado').value;
   const marca  = document.getElementById('filterMarca').value;
-  const prenda = document.getElementById('filterPrenda').value;
+  const linea  = document.getElementById('filterPrenda').value;
   const lugar  = document.getElementById('filterLugar').value;
 
   return allData.filter(r => {
     if (estado && r[COL.estado] !== estado) return false;
     if (marca  && r[COL.marca]  !== marca)  return false;
-    if (prenda && r[COL.prenda] !== prenda) return false;
+    if (linea  && clasificarLinea(r[COL.lugar], r[COL.desc]) !== linea) return false;
     if (lugar  && r[COL.lugar]  !== lugar)  return false;
     if (q) {
       const hay = [r[COL.marca], r[COL.orden], r[COL.desc],
-                   r[COL.color], r[COL.prenda], r[COL.lugar]].join(' ').toLowerCase();
+                   r[COL.color], r[COL.lugar]].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -1101,7 +1098,7 @@ function renderCharts() {
     ['#003d26','#fffae6','#fff0ea','#f0f2f7'],
     ['#00e87a','#8a6000','#c04a00','#5a6080']);
   renderBarPendientes('chartCliente', 'wrapCliente', sumBy(pendientes, COL.marca,    COL.pendiente), '#3b82f6');
-  renderBarPendientes('chartPrenda',  'wrapPrenda',  sumBy(pendientes, COL.prenda,   COL.pendiente), '#0099cc');
+  renderBarPendientes('chartPrenda',  'wrapPrenda',  sumByLinea(pendientes, COL.pendiente), '#0099cc');
   renderSemana(rows);
 }
 
@@ -1109,6 +1106,16 @@ function countBy(data, key) {
   return data.reduce((acc, r) => {
     const v = r[key] || '—';
     acc[v] = (acc[v] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+// Suma agrupada por línea de producción (derivada de descripción + lugar)
+function sumByLinea(data, valCol) {
+  return data.reduce((acc, r) => {
+    const linea = clasificarLinea(r[COL.lugar], r[COL.desc]);
+    const k = linea || r[COL.desc] || '—';
+    acc[k] = (acc[k] || 0) + num(r, valCol);
     return acc;
   }, {});
 }
@@ -1428,7 +1435,7 @@ function renderTable() {
     <tr onclick="openModal(${idxReal})">
       <td style="color:var(--accent);font-weight:600;font-size:12px">${esc(r[COL.marca] || '—')}</td>
       <td class="mono" style="color:var(--accent3)">${esc(r[COL.orden] || '—')}</td>
-      <td style="font-weight:600">${esc(r[COL.prenda] || '—')}</td>
+      <td style="font-weight:600">${esc(clasificarLinea(r[COL.lugar], r[COL.desc]) || '—')}</td>
       <td class="muted-cell" style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${esc(r[COL.desc] || '')}">${esc(truncate(r[COL.desc] || '—', 35))}</td>
       <td class="mono muted-cell">${esc(r[COL.color] || '—')}</td>
       <td class="mono muted-cell">${esc(r[COL.lugar] || '—')}</td>
@@ -1456,7 +1463,7 @@ function openModal(idx) {
   document.getElementById('mRef').textContent = 'Orden ' + (r[COL.orden] || '—');
   document.getElementById('mTitle').textContent = r[COL.marca] || '—';
   document.getElementById('mSubtitle').textContent =
-    [r[COL.prenda], r[COL.desc], r[COL.color]].filter(Boolean).join(' · ');
+    [clasificarLinea(r[COL.lugar], r[COL.desc]), r[COL.desc], r[COL.color]].filter(Boolean).join(' · ');
 
   // Avance
   const pendColor = pend > 0 ? '#e8530a' : pend < 0 ? '#00875a' : '#7a82a0';
