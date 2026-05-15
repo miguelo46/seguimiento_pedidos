@@ -759,12 +759,12 @@
       <div class="chart-wrap"><canvas id="chartEstado" role="img" aria-label="Distribución de pedidos por estado"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">Pedidos por cliente / marca</div>
-      <div class="chart-wrap"><canvas id="chartCliente" role="img" aria-label="Pedidos por cliente"></canvas></div>
+      <div class="chart-title">Unidades pendientes por cliente / marca</div>
+      <div class="chart-wrap" id="wrapCliente" style="height:200px"><canvas id="chartCliente" role="img" aria-label="Pedidos por cliente"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">Pedidos por prenda</div>
-      <div class="chart-wrap"><canvas id="chartPrenda" role="img" aria-label="Pedidos por tipo de prenda"></canvas></div>
+      <div class="chart-title">Unidades pendientes por prenda</div>
+      <div class="chart-wrap" id="wrapPrenda" style="height:200px"><canvas id="chartPrenda" role="img" aria-label="Pedidos por tipo de prenda"></canvas></div>
     </div>
   </div>
 
@@ -786,8 +786,8 @@
           <div class="fabrica-subtotales" id="varennaPendTotal"></div>
         </div>
         <div class="fabrica-lineas">
-          <span class="linea-badge" style="color:#0077cc;border-color:#0077cc;background:#0077cc11">Mangas</span>
-          <span class="linea-badge" style="color:#0099cc;border-color:#0099cc;background:#0099cc11">Pantalones</span>
+          <span class="linea-badge" style="color:#1a3a66;border-color:#1a3a66;background:#1a3a6611">Mangas</span>
+          <span class="linea-badge" style="color:#00b4d8;border-color:#00b4d8;background:#00b4d811">Pantalones</span>
         </div>
         <div class="fabrica-chart-wrap">
           <canvas id="chartVarenna"></canvas>
@@ -796,13 +796,13 @@
 
       <!-- TEJICA -->
       <div class="fabrica-card">
-        <div class="fabrica-card-header" style="border-top: 3px solid #e8530a;">
-          <span class="fabrica-nombre" style="color:#e8530a">TEJICA</span>
+        <div class="fabrica-card-header" style="border-top: 3px solid #c1121f;">
+          <span class="fabrica-nombre" style="color:#c1121f">TEJICA</span>
           <div class="fabrica-subtotales" id="tejicaPendTotal"></div>
         </div>
         <div class="fabrica-lineas">
-          <span class="linea-badge" style="color:#e8530a;border-color:#e8530a;background:#e8530a11">Camisas</span>
-          <span class="linea-badge" style="color:#f0a500;border-color:#f0a500;background:#f0a50011">Pantalones</span>
+          <span class="linea-badge" style="color:#c1121f;border-color:#c1121f;background:#c1121f11">Camisas</span>
+          <span class="linea-badge" style="color:#2d6a4f;border-color:#2d6a4f;background:#2d6a4f11">Pantalones</span>
         </div>
         <div class="fabrica-chart-wrap">
           <canvas id="chartTejica"></canvas>
@@ -1093,11 +1093,15 @@ function renderKPIs() {
 // ── CHARTS ───────────────────────────────────────────────
 function renderCharts() {
   const rows = getFiltered();
+
+  // Solo pendientes (pendiente > 0) para los gráficos de cliente y prenda
+  const pendientes = rows.filter(r => num(r, COL.pendiente) > 0);
+
   renderPie('chartEstado', countBy(rows, COL.estado),
     ['#003d26','#fffae6','#fff0ea','#f0f2f7'],
     ['#00e87a','#8a6000','#c04a00','#5a6080']);
-  renderBar('chartCliente', countBy(rows, COL.marca), '#3b82f633', '#3b82f6');
-  renderBar('chartPrenda',  countBy(rows, COL.prenda), '#0099cc33', '#0099cc');
+  renderBarPendientes('chartCliente', 'wrapCliente', sumBy(pendientes, COL.marca,    COL.pendiente), '#3b82f6');
+  renderBarPendientes('chartPrenda',  'wrapPrenda',  sumBy(pendientes, COL.prenda,   COL.pendiente), '#0099cc');
   renderSemana(rows);
 }
 
@@ -1109,7 +1113,60 @@ function countBy(data, key) {
   }, {});
 }
 
-function renderPie(id, counts, bgColors, borderColors) {
+// Suma de una columna numérica agrupada por clave
+function sumBy(data, keyCol, valCol) {
+  return data.reduce((acc, r) => {
+    const k = r[keyCol] || '—';
+    acc[k] = (acc[k] || 0) + num(r, valCol);
+    return acc;
+  }, {});
+}
+
+// Barra horizontal con altura dinámica según cantidad de categorías
+function renderBarPendientes(canvasId, wrapperId, counts, color) {
+  if (charts[canvasId]) charts[canvasId].destroy();
+
+  // Ordenar de mayor a menor y quitar los que tienen 0
+  const entries = Object.entries(counts)
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a);
+
+  const labels = entries.map(([k]) => k);
+  const values = entries.map(([, v]) => v);
+
+  // Altura dinámica: 28px por categoría, mínimo 160px
+  const rowH = 28;
+  const h    = Math.max(160, labels.length * rowH);
+  const wrap = document.getElementById(wrapperId);
+  if (wrap) wrap.style.height = h + 'px';
+
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: color + '55',
+        borderColor: color,
+        borderWidth: 1.5,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.raw.toLocaleString('es-AR')} u. pendientes` } }
+      },
+      scales: {
+        x: { ticks: { color: '#7a82a0', font: { size: 9 }, callback: v => formatK(v) }, grid: { color: '#dde1ec' } },
+        y: { ticks: { color: '#5a6080', font: { size: 10, family: 'DM Mono' } }, grid: { display: false } }
+      }
+    }
+  });
+}
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
   charts[id] = new Chart(ctx, {
@@ -1231,12 +1288,12 @@ function renderFabricas() {
   });
 
   renderFabricaChart('VARENNA', conPend, 'chartVarenna', 'varennaPendTotal',
-    { 'Mangas':     { bg: '#0077cc44', border: '#0077cc' },
-      'Pantalones': { bg: '#0099cc44', border: '#0099cc' } });
+    { 'Mangas':     { bg: '#1a3a6655', border: '#1a3a66' },
+      'Pantalones': { bg: '#00b4d855', border: '#00b4d8' } });
 
   renderFabricaChart('TEJICA', conPend, 'chartTejica', 'tejicaPendTotal',
-    { 'Camisas':    { bg: '#e8530a44', border: '#e8530a' },
-      'Pantalones': { bg: '#f0a50044', border: '#f0a500' } });
+    { 'Camisas':    { bg: '#c1121f55', border: '#c1121f' },
+      'Pantalones': { bg: '#2d6a4f55', border: '#2d6a4f' } });
 
   renderFabricaChart('ICSA', conPend, 'chartIcsa', 'icsaPendTotal',
     { 'Punto':      { bg: '#00875a44', border: '#00875a' } });
