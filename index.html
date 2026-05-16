@@ -1011,9 +1011,23 @@ function finishLoad(src) {
 
 // ── HELPERS NUMÉRICOS ────────────────────────────────────
 function num(r, col) {
-  const v = String(r[col] || '').replace(/[^\d.\-]/g, '').replace('\\-', '-');
+  // El CSV de Google Sheets exporta negativos como \-5 y miles como 1.200
+  let v = String(r[col] || '');
+  // Detectar negativo (con o sin backslash)
+  const neg = v.includes('-');
+  // Quitar todo excepto dígitos y punto, luego eliminar puntos de miles
+  v = v.replace(/[^\d.]/g, '');
+  // Si hay más de un punto, son separadores de miles → quitarlos todos
+  const dots = (v.match(/\./g) || []).length;
+  if (dots > 1) v = v.replace(/\./g, '');
+  else if (dots === 1) {
+    // Un solo punto: si está a 3 posiciones del final y no hay decimales típicos → miles
+    const parts = v.split('.');
+    if (parts[1] && parts[1].length === 3) v = v.replace('.', '');
+  }
   const n = parseFloat(v);
-  return isNaN(n) ? 0 : n;
+  if (isNaN(n)) return 0;
+  return neg ? -n : n;
 }
 
 function formatK(n) {
