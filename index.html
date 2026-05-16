@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
   :root {
     --bg:       #f4f6fa;
@@ -826,6 +827,14 @@
     </div>
   </div>
 
+  <!-- SANKEY: CLIENTES → PRENDAS -->
+  <div class="chart-card" style="margin-bottom: 32px;">
+    <div class="chart-title">Flujo de unidades pendientes — clientes → tipo de prenda</div>
+    <div id="sankeyWrap" style="width:100%; overflow-x:auto;">
+      <svg id="sankeySvg" style="display:block; margin:0 auto;"></svg>
+    </div>
+  </div>
+
   <!-- FILTERS -->
   <div class="filters-row">
     <span class="filter-label">Filtrar:</span>
@@ -944,6 +953,9 @@ const COL = {
   cantEntregada:'CANTIDAD ENTREGADA',
   fCierre:     'FECHA PEDIDO CERRADO',
   pendiente:   'PENDIENTE',
+  prenda:      'PRENDA',
+  semSol:      'SEMANA SOLICITADA ENTREGA',
+  semPact:     'SEMANA PACTADA ENTREGA',
   semCierre:   'SEMANA PEDIDO CERRADO',
 };
 
@@ -993,6 +1005,7 @@ function finishLoad(src) {
   renderKPIs();
   renderCharts();
   renderFabricas();
+  renderSankey();
   renderTable();
 }
 
@@ -1018,7 +1031,7 @@ function pct(entregado, pedido) {
 function populateFilters() {
   const estados = [...new Set(allData.map(r => r[COL.estado]).filter(Boolean))].sort();
   const marcas  = [...new Set(allData.map(r => r[COL.marca]).filter(Boolean))].sort();
-  const lineas  = [...new Set(allData.map(r => clasificarLinea(r[COL.lugar], r[COL.desc])).filter(Boolean))].sort();
+  const lineas  = [...new Set(allData.map(r => clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda])).filter(Boolean))].sort();
   const lugares = [...new Set(allData.map(r => r[COL.lugar]).filter(Boolean))].sort();
 
   fillSelect('filterEstado', estados);
@@ -1049,7 +1062,7 @@ function getFiltered() {
   return allData.filter(r => {
     if (estado && r[COL.estado] !== estado) return false;
     if (marca  && r[COL.marca]  !== marca)  return false;
-    if (linea  && clasificarLinea(r[COL.lugar], r[COL.desc]) !== linea) return false;
+    if (linea  && clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda]) !== linea) return false;
     if (lugar  && r[COL.lugar]  !== lugar)  return false;
     if (q) {
       const hay = [r[COL.marca], r[COL.orden], r[COL.desc],
@@ -1065,6 +1078,7 @@ function applyFilters() {
   renderKPIs();
   renderCharts();
   renderFabricas();
+  renderSankey();
 }
 
 // ── KPIs ─────────────────────────────────────────────────
@@ -1113,7 +1127,7 @@ function countBy(data, key) {
 // Suma agrupada por línea de producción (derivada de descripción + lugar)
 function sumByLinea(data, valCol) {
   return data.reduce((acc, r) => {
-    const linea = clasificarLinea(r[COL.lugar], r[COL.desc]);
+    const linea = clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda]);
     const k = linea || r[COL.desc] || '—';
     acc[k] = (acc[k] || 0) + num(r, valCol);
     return acc;
@@ -1231,29 +1245,33 @@ function renderSemana(rows) {
   });
 }
 
-// ── CLASIFICACIÓN POR DESCRIPCIÓN ───────────────────────
-// Devuelve la línea de producción según fábrica + descripción
-function clasificarLinea(lugar, desc) {
-  const d = (desc || '').toUpperCase();
-  const l = (lugar || '').toUpperCase();
+// ── CLASIFICACIÓN POR PRENDA + FÁBRICA ───────────────────
+// Normaliza variantes de nombre y devuelve la línea de producción
+function normalizarPrenda(prenda) {
+  const p = (prenda || '').toUpperCase().trim();
+  if (p === 'BLAZER' || p === 'BLASIER') return 'BLAZER/BLASIER';
+  return p;
+}
+
+function clasificarLinea(lugar, desc, prenda) {
+  const l = (lugar  || '').toUpperCase();
+  const p = normalizarPrenda(prenda);
 
   if (l.includes('VARENNA')) {
-    // Pantalones: descripción contiene PANTALON
-    if (/PANTALON/.test(d)) return 'Pantalones';
-    // Mangas: todo lo demás (blasier, blazer, coat, abrigo, sac, saco, etc.)
+    if (p === 'PANTALON') return 'Pantalones';
+    // Mangas: blazer, blasier, coat (H7513), abrigo, saco, etc.
     return 'Mangas';
   }
 
   if (l.includes('TEJICA')) {
-    // Camisas: camisa, camiseta, set de lino
-    if (/CAMISA|CAMISETA|SET/.test(d)) return 'Camisas';
-    // Pantalones: pantalon, bermuda, chino, jogger, táctico, fajina
+    if (/CAMISA|CAMISETA|SET/.test(p)) return 'Camisas';
+    // Pantalones: PANTALON, BERMUDA, CHINO, y cualquier otro
     return 'Pantalones';
   }
 
   if (l.includes('ICSA')) return 'Punto';
 
-  return null; // fábricas no reconocidas (BRANDTEAM, etc.)
+  return null; // BRANDTEAM u otras fábricas no clasificadas
 }
 
 // ── GRÁFICOS DE FÁBRICAS ─────────────────────────────────
@@ -1293,7 +1311,7 @@ function renderFabricaChart(fabrica, allRows, canvasId, totalId, lineaStyles) {
   lineas.forEach(l => mapa[l] = {});
 
   rows.forEach(r => {
-    const linea = clasificarLinea(r[COL.lugar], r[COL.desc]);
+    const linea = clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda]);
     if (!linea || !mapa[linea]) return;
     const sem  = r[COL.semSol];
     const pend = num(r, COL.pendiente);
@@ -1379,6 +1397,171 @@ function renderFabricaChart(fabrica, allRows, canvasId, totalId, lineaStyles) {
     }
   });
 }
+
+// ── SANKEY ───────────────────────────────────────────────
+function renderSankey() {
+  const rows = getFiltered().filter(r => num(r, COL.pendiente) > 0);
+
+  const flowMap = {};
+  rows.forEach(r => {
+    const cliente = (r[COL.marca] || '—').trim();
+    const prenda  = normalizarPrenda(r[COL.prenda]) || '—';
+    const pend    = num(r, COL.pendiente);
+    const key     = cliente + '||' + prenda;
+    flowMap[key]  = (flowMap[key] || 0) + pend;
+  });
+
+  const flows = Object.entries(flowMap)
+    .map(([k, v]) => { const [s, t] = k.split('||'); return { source: s, target: t, value: v }; })
+    .filter(f => f.value > 0);
+
+  const svg = d3.select('#sankeySvg');
+  svg.selectAll('*').remove();
+
+  if (!flows.length) return;
+
+  const leftTotals  = {};
+  const rightTotals = {};
+  flows.forEach(f => {
+    leftTotals[f.source]  = (leftTotals[f.source]  || 0) + f.value;
+    rightTotals[f.target] = (rightTotals[f.target] || 0) + f.value;
+  });
+
+  const clienteNames = Object.keys(leftTotals).sort((a, b) => leftTotals[b]  - leftTotals[a]);
+  const prendaNames  = Object.keys(rightTotals).sort((a, b) => rightTotals[b] - rightTotals[a]);
+
+  const W    = Math.max(700, (document.getElementById('sankeyWrap').clientWidth || 900) - 32);
+  const pad  = 14;
+  const nodeW = 16;
+  const rowH  = 38;
+  const H     = Math.max(clienteNames.length, prendaNames.length) * rowH + 40;
+  const allVal = Object.values(leftTotals).reduce((a, b) => a + b, 0);
+  const scale  = (H - pad * (clienteNames.length - 1)) / allVal;
+
+  svg.attr('width', W).attr('height', H + 20);
+
+  const xL = 175, xR = W - 175;
+
+  // Posiciones Y
+  let yL = 10;
+  const leftPos = {};
+  clienteNames.forEach(n => {
+    leftPos[n] = { y: yL, h: Math.max(leftTotals[n] * scale, 4) };
+    yL += leftPos[n].h + pad;
+  });
+
+  let yR = 10;
+  const rightPos = {};
+  prendaNames.forEach(n => {
+    rightPos[n] = { y: yR, h: Math.max(rightTotals[n] * scale, 4) };
+    yR += rightPos[n].h + pad;
+  });
+
+  // Paleta prendas
+  const prendaColors = {
+    'PANTALON':       '#00b4d8',
+    'CAMISA':         '#e8530a',
+    'CAMISETA':       '#f0a500',
+    'BERMUDA':        '#0077cc',
+    'CHINO':          '#6a4c93',
+    'BLAZER/BLASIER': '#1a3a66',
+    'SET DE LINO':    '#00875a',
+    'ABRIGO':         '#8b2fc9',
+    'H7513':          '#888',
+  };
+
+  const clienteColores = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#f43f5e'];
+  const cColor = {};
+  clienteNames.forEach((n, i) => cColor[n] = clienteColores[i % clienteColores.length]);
+
+  // Offsets acumulados
+  const offL = {}; clienteNames.forEach(n => offL[n] = 0);
+  const offR = {}; prendaNames.forEach(n  => offR[n] = 0);
+
+  // Links
+  // Ordenar flows: para cada cliente, ordenar sus targets por prendaNames index para consistencia visual
+  const flowsOrdered = [...flows].sort((a, b) =>
+    clienteNames.indexOf(a.source) - clienteNames.indexOf(b.source) ||
+    prendaNames.indexOf(a.target)  - prendaNames.indexOf(b.target)
+  );
+
+  flowsOrdered.forEach(f => {
+    const lp    = leftPos[f.source];
+    const rp    = rightPos[f.target];
+    const h     = Math.max(f.value * scale, 1);
+    const y0    = lp.y + offL[f.source];
+    const y1    = rp.y + offR[f.target];
+    const color = prendaColors[f.target] || '#aaa';
+    const cx    = (xL + nodeW + xR) / 2;
+
+    const path = `M${xL + nodeW},${y0}
+      C${cx},${y0} ${cx},${y1} ${xR},${y1}
+      L${xR},${y1 + h}
+      C${cx},${y1 + h} ${cx},${y0 + h} ${xL + nodeW},${y0 + h}Z`;
+
+    svg.append('path')
+      .attr('d', path)
+      .attr('fill', color)
+      .attr('opacity', 0.3)
+      .attr('stroke', color)
+      .attr('stroke-width', 0.5)
+      .append('title')
+      .text(`${f.source} → ${f.target}: ${f.value.toLocaleString('es-AR')} u.`);
+
+    offL[f.source] += h;
+    offR[f.target] += h;
+  });
+
+  // Nodos y etiquetas izquierda
+  clienteNames.forEach(n => {
+    const p = leftPos[n];
+    const color = cColor[n];
+    svg.append('rect')
+      .attr('x', xL).attr('y', p.y)
+      .attr('width', nodeW).attr('height', p.h)
+      .attr('fill', color).attr('rx', 3);
+
+    const label = n.replace('ZARA MAN - ', '').replace('ZARA WOMAN - ', 'W. ').replace('ZARA MAN CIRCULAR - ', 'CIRC. ');
+    svg.append('text')
+      .attr('x', xL - 8).attr('y', p.y + p.h / 2 - 6)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('font-size', 10).attr('font-family', 'DM Mono, monospace')
+      .attr('fill', '#3a4060')
+      .text(label.length > 20 ? label.slice(0, 19) + '…' : label);
+
+    svg.append('text')
+      .attr('x', xL - 8).attr('y', p.y + p.h / 2 + 7)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('font-size', 9).attr('font-family', 'DM Mono, monospace')
+      .attr('fill', color).attr('font-weight', '600')
+      .text(leftTotals[n].toLocaleString('es-AR') + ' u.');
+  });
+
+  // Nodos y etiquetas derecha
+  prendaNames.forEach(n => {
+    const p = rightPos[n];
+    const color = prendaColors[n] || '#aaa';
+    svg.append('rect')
+      .attr('x', xR).attr('y', p.y)
+      .attr('width', nodeW).attr('height', p.h)
+      .attr('fill', color).attr('rx', 3);
+
+    svg.append('text')
+      .attr('x', xR + nodeW + 8).attr('y', p.y + p.h / 2 - 6)
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', 10).attr('font-family', 'DM Mono, monospace')
+      .attr('fill', '#3a4060')
+      .text(n);
+
+    svg.append('text')
+      .attr('x', xR + nodeW + 8).attr('y', p.y + p.h / 2 + 7)
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', 9).attr('font-family', 'DM Mono, monospace')
+      .attr('fill', color).attr('font-weight', '600')
+      .text(rightTotals[n].toLocaleString('es-AR') + ' u.');
+  });
+}
+
 function sortBy(col) {
   if (sortCol === col) sortAsc = !sortAsc;
   else { sortCol = col; sortAsc = true; }
@@ -1435,7 +1618,7 @@ function renderTable() {
     <tr onclick="openModal(${idxReal})">
       <td style="color:var(--accent);font-weight:600;font-size:12px">${esc(r[COL.marca] || '—')}</td>
       <td class="mono" style="color:var(--accent3)">${esc(r[COL.orden] || '—')}</td>
-      <td style="font-weight:600">${esc(clasificarLinea(r[COL.lugar], r[COL.desc]) || '—')}</td>
+      <td style="font-weight:600">${esc(clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda]) || '—')}</td>
       <td class="muted-cell" style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${esc(r[COL.desc] || '')}">${esc(truncate(r[COL.desc] || '—', 35))}</td>
       <td class="mono muted-cell">${esc(r[COL.color] || '—')}</td>
       <td class="mono muted-cell">${esc(r[COL.lugar] || '—')}</td>
@@ -1463,7 +1646,7 @@ function openModal(idx) {
   document.getElementById('mRef').textContent = 'Orden ' + (r[COL.orden] || '—');
   document.getElementById('mTitle').textContent = r[COL.marca] || '—';
   document.getElementById('mSubtitle').textContent =
-    [clasificarLinea(r[COL.lugar], r[COL.desc]), r[COL.desc], r[COL.color]].filter(Boolean).join(' · ');
+    [clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda]), r[COL.desc], r[COL.color]].filter(Boolean).join(' · ');
 
   // Avance
   const pendColor = pend > 0 ? '#e8530a' : pend < 0 ? '#00875a' : '#7a82a0';
