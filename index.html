@@ -1261,32 +1261,56 @@ function renderSemana(rows) {
 }
 
 // ── CLASIFICACIÓN POR PRENDA + FÁBRICA ───────────────────
-// Normaliza variantes de nombre y devuelve la línea de producción
+// La columna PRENDA ya tiene tipos limpios; solo normalizamos variantes y casos especiales
 function normalizarPrenda(prenda) {
   const p = (prenda || '').toUpperCase().trim();
-  if (p === 'BLAZER' || p === 'BLASIER') return 'BLAZER/BLASIER';
+  if (!p) return '—';
+
+  // Alias conocidos → tipo canónico
+  const ALIAS = {
+    'BLASIER':    'BLAZER',
+    'SET DE LINO':'CONJUNTO',
+    'CHOMBA':     'CAMISETA',
+    'REMERA':     'CAMISETA',
+    'SOBRECAMISA':'CAMISA',
+    'CHOMBA':     'CAMISETA',
+    'BUZO':       'SWEATER',
+    'HOODIE':     'SWEATER',
+    'CHINO':      'PANTALON',
+    'JEANS':      'PANTALON',
+    'GABAN':      'ABRIGO',
+    'PARKA':      'ABRIGO',
+    'TRENCH':     'ABRIGO',
+    'POLAR':      'SWEATER',
+    'AMBO':       'CONJUNTO',
+    'SMOKING':    'BLAZER',
+  };
+
+  if (ALIAS[p]) return ALIAS[p];
+
+  // Si es un número o código raro (H7513, 100, etc.), agrupar como 'OTROS'
+  if (/^\d+$/.test(p) || /^H\d+/.test(p) || p === 'PRENDA') return 'OTROS';
+
   return p;
 }
 
 function clasificarLinea(lugar, desc, prenda) {
   const l = (lugar  || '').toUpperCase();
-  const p = normalizarPrenda(prenda);
+  const p = normalizarPrenda(prenda); // ya normalizado
 
   if (l.includes('VARENNA')) {
     if (p === 'PANTALON') return 'Pantalones';
-    // Mangas: blazer, blasier, coat (H7513), abrigo, saco, etc.
-    return 'Mangas';
+    return 'Mangas'; // blazer, saco, abrigo, etc.
   }
 
   if (l.includes('TEJICA')) {
-    if (/CAMISA|CAMISETA|SET/.test(p)) return 'Camisas';
-    // Pantalones: PANTALON, BERMUDA, CHINO, y cualquier otro
-    return 'Pantalones';
+    if (['CAMISA', 'CAMISETA', 'CONJUNTO'].includes(p)) return 'Camisas';
+    return 'Pantalones'; // PANTALON, BERMUDA, CHINO → ya normalizados
   }
 
   if (l.includes('ICSA')) return 'Punto';
 
-  return null; // BRANDTEAM u otras fábricas no clasificadas
+  return null; // otras fábricas: se usa normalizarPrenda directamente en sumByLinea
 }
 
 // ── GRÁFICOS DE FÁBRICAS ─────────────────────────────────
@@ -1500,6 +1524,23 @@ function renderSankey() {
     prendaNames.indexOf(a.target)  - prendaNames.indexOf(b.target)
   );
 
+  // Tooltip div reutilizable
+  let sankeyTip = document.getElementById('sankeyTooltip');
+  if (!sankeyTip) {
+    sankeyTip = document.createElement('div');
+    sankeyTip.id = 'sankeyTooltip';
+    sankeyTip.style.cssText = `
+      position:fixed; pointer-events:none; display:none;
+      background:#1a1d2e; color:#fff; font-family:'DM Mono',monospace;
+      font-size:11px; padding:7px 12px; border-radius:7px;
+      box-shadow:0 4px 16px rgba(0,0,0,.35); white-space:nowrap; z-index:9999;
+      border-left:3px solid #0077cc;
+    `;
+    document.body.appendChild(sankeyTip);
+  }
+
+  const allPaths = []; // para atenuar el resto en hover
+
   flowsOrdered.forEach(f => {
     const lp    = leftPos[f.source];
     const rp    = rightPos[f.target];
@@ -1509,19 +1550,47 @@ function renderSankey() {
     const color = prendaColors[f.target] || '#aaa';
     const cx    = (xL + nodeW + xR) / 2;
 
-    const path = `M${xL + nodeW},${y0}
+    const pathD = `M${xL + nodeW},${y0}
       C${cx},${y0} ${cx},${y1} ${xR},${y1}
       L${xR},${y1 + h}
       C${cx},${y1 + h} ${cx},${y0 + h} ${xL + nodeW},${y0 + h}Z`;
 
-    svg.append('path')
-      .attr('d', path)
+    const pathEl = svg.append('path')
+      .attr('d', pathD)
       .attr('fill', color)
-      .attr('opacity', 0.3)
+      .attr('opacity', 0.25)
       .attr('stroke', color)
       .attr('stroke-width', 0.5)
-      .append('title')
-      .text(`${f.source} → ${f.target}: ${f.value.toLocaleString('es-AR')} u.`);
+      .attr('cursor', 'pointer')
+      .attr('data-source', f.source)
+      .attr('data-target', f.target);
+
+    allPaths.push({ el: pathEl, color, source: f.source, target: f.target });
+
+    pathEl
+      .on('mousemove', function(event) {
+        // Resaltar este flujo
+        allPaths.forEach(p => {
+          if (p.el === pathEl) {
+            p.el.attr('opacity', 0.85).attr('stroke-width', 1.5);
+          } else {
+            p.el.attr('opacity', 0.06);
+          }
+        });
+        // Tooltip
+        sankeyTip.style.borderColor = color;
+        sankeyTip.innerHTML = `
+          <span style="color:${color};font-weight:600">${f.target}</span>
+          &nbsp;←&nbsp;${f.source.replace('ZARA MAN - ','').replace('ZARA WOMAN - ','').replace('ZARA MAN CIRCULAR - ','CIRC. ')}
+          <br><span style="color:#aab;font-size:10px">${f.value.toLocaleString('es-AR')} u. pendientes</span>`;
+        sankeyTip.style.display = 'block';
+        sankeyTip.style.left = (event.clientX + 14) + 'px';
+        sankeyTip.style.top  = (event.clientY - 10) + 'px';
+      })
+      .on('mouseleave', function() {
+        allPaths.forEach(p => p.el.attr('opacity', 0.25).attr('stroke-width', 0.5));
+        sankeyTip.style.display = 'none';
+      });
 
     offL[f.source] += h;
     offR[f.target] += h;
