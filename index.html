@@ -769,10 +769,10 @@
     </div>
   </div>
 
-  <!-- UNIDADES POR SEMANA -->
-  <div class="chart-card" style="margin-bottom: 32px;">
+  <!-- UNIDADES POR SEMANA — ancho completo -->
+  <div class="chart-card" style="margin-bottom: 32px; width: 100%;">
     <div class="chart-title">Unidades pedidas vs entregadas por semana solicitada de entrega</div>
-    <div class="chart-wrap" style="height: 240px;"><canvas id="chartSemana" role="img" aria-label="Unidades pedidas vs entregadas por semana"></canvas></div>
+    <div class="chart-wrap" style="height: 260px;"><canvas id="chartSemana" role="img" aria-label="Unidades pedidas vs entregadas por semana"></canvas></div>
   </div>
 
   <!-- CAPACIDAD POR FÁBRICA -->
@@ -831,7 +831,7 @@
   <div class="chart-card" style="margin-bottom: 32px;">
     <div class="chart-title">Flujo de unidades pendientes — clientes → tipo de prenda</div>
     <div id="sankeyWrap" style="width:100%; overflow-x:auto;">
-      <svg id="sankeySvg" style="display:block; margin:0 auto;"></svg>
+      <svg id="sankeySvg" style="display:block; margin:0 auto; pointer-events:all;"></svg>
     </div>
   </div>
 
@@ -1138,12 +1138,10 @@ function countBy(data, key) {
   }, {});
 }
 
-// Suma agrupada por tipo de prenda (línea de producción o prenda normalizada)
+// Suma agrupada por TIPO DE PRENDA (siempre normalizarPrenda, nunca clasificarLinea)
 function sumByLinea(data, valCol) {
   return data.reduce((acc, r) => {
-    const linea = clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda]);
-    // Si no hay línea clasificada, usar el tipo de prenda normalizado; si tampoco existe, '—'
-    const k = linea || normalizarPrenda(r[COL.prenda]) || '—';
+    const k = normalizarPrenda(r[COL.prenda]) || '—';
     acc[k] = (acc[k] || 0) + num(r, valCol);
     return acc;
   }, {});
@@ -1496,17 +1494,23 @@ function renderSankey() {
     yR += rightPos[n].h + pad;
   });
 
-  // Paleta prendas
+  // Paleta prendas — claves deben coincidir exactamente con normalizarPrenda()
   const prendaColors = {
-    'PANTALON':       '#00b4d8',
-    'CAMISA':         '#e8530a',
-    'CAMISETA':       '#f0a500',
-    'BERMUDA':        '#0077cc',
-    'CHINO':          '#6a4c93',
-    'BLAZER/BLASIER': '#1a3a66',
-    'SET DE LINO':    '#00875a',
-    'ABRIGO':         '#8b2fc9',
-    'H7513':          '#888',
+    'PANTALON':  '#00b4d8',
+    'CAMISA':    '#e8530a',
+    'CAMISETA':  '#f0a500',
+    'BERMUDA':   '#0077cc',
+    'BLAZER':    '#1a3a66',
+    'CONJUNTO':  '#00875a',
+    'ABRIGO':    '#8b2fc9',
+    'SWEATER':   '#06b6d4',
+    'CHALECO':   '#84cc16',
+    'SACO':      '#4a6fa5',
+    'CAMPERA':   '#c1121f',
+    'BOMBER':    '#d62828',
+    'CINTURON':  '#aaa',
+    'ZAPATOS':   '#888',
+    'OTROS':     '#ccc',
   };
 
   const clienteColores = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#f43f5e'];
@@ -1562,27 +1566,31 @@ function renderSankey() {
       .attr('stroke', color)
       .attr('stroke-width', 0.5)
       .attr('cursor', 'pointer')
+      .attr('pointer-events', 'all')
       .attr('data-source', f.source)
       .attr('data-target', f.target);
 
-    allPaths.push({ el: pathEl, color, source: f.source, target: f.target });
+    allPaths.push({ el: pathEl, color, source: f.source, target: f.target, flow: f });
+
+    const _f = f;       // captura local para los closures
+    const _color = color;
 
     pathEl
-      .on('mousemove', function(event) {
-        // Resaltar este flujo
+      .on('mouseover', function() {
         allPaths.forEach(p => {
-          if (p.el === pathEl) {
-            p.el.attr('opacity', 0.85).attr('stroke-width', 1.5);
+          if (p.flow === _f) {
+            p.el.attr('opacity', 0.85).attr('stroke-width', 2);
           } else {
-            p.el.attr('opacity', 0.06);
+            p.el.attr('opacity', 0.05);
           }
         });
-        // Tooltip
-        sankeyTip.style.borderColor = color;
+      })
+      .on('mousemove', function(event) {
+        sankeyTip.style.borderColor = _color;
         sankeyTip.innerHTML = `
-          <span style="color:${color};font-weight:600">${f.target}</span>
-          &nbsp;←&nbsp;${f.source.replace('ZARA MAN - ','').replace('ZARA WOMAN - ','').replace('ZARA MAN CIRCULAR - ','CIRC. ')}
-          <br><span style="color:#aab;font-size:10px">${f.value.toLocaleString('es-AR')} u. pendientes</span>`;
+          <span style="color:${_color};font-weight:600">${_f.target}</span>
+          &nbsp;←&nbsp;${_f.source.replace('ZARA MAN - ','').replace('ZARA WOMAN - ','W. ').replace('ZARA MAN CIRCULAR - ','CIRC. ')}
+          <br><span style="color:#aab;font-size:10px">${_f.value.toLocaleString('es-AR')} u. pendientes</span>`;
         sankeyTip.style.display = 'block';
         sankeyTip.style.left = (event.clientX + 14) + 'px';
         sankeyTip.style.top  = (event.clientY - 10) + 'px';
