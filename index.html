@@ -1138,11 +1138,12 @@ function countBy(data, key) {
   }, {});
 }
 
-// Suma agrupada por línea de producción (derivada de descripción + lugar)
+// Suma agrupada por tipo de prenda (línea de producción o prenda normalizada)
 function sumByLinea(data, valCol) {
   return data.reduce((acc, r) => {
     const linea = clasificarLinea(r[COL.lugar], r[COL.desc], r[COL.prenda]);
-    const k = linea || r[COL.desc] || '—';
+    // Si no hay línea clasificada, usar el tipo de prenda normalizado; si tampoco existe, '—'
+    const k = linea || normalizarPrenda(r[COL.prenda]) || '—';
     acc[k] = (acc[k] || 0) + num(r, valCol);
     return acc;
   }, {});
